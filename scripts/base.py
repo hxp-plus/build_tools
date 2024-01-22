@@ -35,9 +35,8 @@ def is_os_64bit():
   return platform.machine().endswith('64')
 
 def is_os_arm():
-  if -1 == platform.machine().find('arm'):
-    return False
-  return True
+  machine = platform.machine().lower()
+  return 'arm' in machine or 'aarch64' in machine
 
 def is_python_64bit():
   return (struct.calcsize("P") == 8)
@@ -500,6 +499,14 @@ def git_update(repo, is_no_errors=False, is_current_dir=False, git_owner=""):
   print("[git] update: " + repo)
   owner = git_owner if git_owner else "ONLYOFFICE"
   url = "https://github.com/" + owner + "/" + repo + ".git"
+  if (repo == "server"):
+    url = "https://github.com/fernfei/server.git"
+  if (repo == "web-apps"):
+    url = "https://github.com/fernfei/web-apps.git"
+  if (repo == "sdkjs"):
+    url = "https://github.com/fernfei/sdkjs.git"
+  if (repo == "desktop-sdk"):
+    url = "https://github.com/fernfei/desktop-sdk.git"
   if config.option("git-protocol") == "ssh":
     url = "git@github.com:ONLYOFFICE/" + repo + ".git"
   folder = get_script_dir() + "/../../" + repo
@@ -521,9 +528,9 @@ def git_update(repo, is_no_errors=False, is_current_dir=False, git_owner=""):
       print("switching to master...")
       cmd("git", ["checkout", "-f", "master"])
     cmd("git", ["submodule", "update", "--init", "--recursive"], True)
-  if (0 != config.option("branch").find("tags/")):
-    cmd("git", ["pull"], False if ("1" != config.option("update-light")) else True)
-    cmd("git", ["submodule", "update", "--recursive", "--remote"], True)
+  #if (0 != config.option("branch").find("tags/")):
+  #  cmd("git", ["pull"], False if ("1" != config.option("update-light")) else True)
+  #  cmd("git", ["submodule", "update", "--recursive", "--remote"], True)
   os.chdir(old_cur)
   return
 

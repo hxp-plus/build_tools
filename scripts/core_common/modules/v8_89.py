@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import sys
 sys.path.append('../..')
@@ -6,6 +7,8 @@ import config
 import base
 import os
 import subprocess
+import shutil
+import platform
 
 def change_bootstrap():
   base.move_file("./depot_tools/bootstrap/manifest.txt", "./depot_tools/bootstrap/manifest.txt.bak")
@@ -26,19 +29,18 @@ def change_bootstrap():
 
 def make_args(args, platform, is_64=True, is_debug=False):
   args_copy = args[:]
-  if is_64:
-    args_copy.append("target_cpu=\\\"x64\\\"") 
-    args_copy.append("v8_target_cpu=\\\"x64\\\"")
+  if not base.is_os_arm():
+    if is_64:
+      args_copy.append("target_cpu=\\\"x64\\\"")
+      args_copy.append("v8_target_cpu=\\\"x64\\\"")
+    else:
+      args_copy.append("target_cpu=\\\"x86\\\"")
+      args_copy.append("v8_target_cpu=\\\"x86\\\"")
   else:
-    args_copy.append("target_cpu=\\\"x86\\\"") 
-    args_copy.append("v8_target_cpu=\\\"x86\\\"")
-
-  if (platform == "linux_arm64"):
     args_copy = args[:]
     args_copy.append("target_cpu=\\\"arm64\\\"")
     args_copy.append("v8_target_cpu=\\\"arm64\\\"")
     args_copy.append("use_sysroot=true")
-  
   if is_debug:
     args_copy.append("is_debug=true")
     if (platform == "windows"):
@@ -48,7 +50,8 @@ def make_args(args, platform, is_64=True, is_debug=False):
   
   if (platform == "linux"):
     args_copy.append("is_clang=true")
-    args_copy.append("use_sysroot=false")
+    if base.is_os_arm():
+      args_copy.append("use_sysroot=false")
   if (platform == "windows"):
     args_copy.append("is_clang=false")
 
@@ -95,8 +98,69 @@ def unpatch_windows_debug():
   file_patch = "./src/heap/heap.h"
   base.move_file(file_patch + ".bak", file_patch)
   return
-# ----------------------------------------------------------------------
+  
+def create_symlink(src, dest):
+  if not os.path.exists(dest):
+    base.cmd("sudo", ["ln","-s", src, dest])
 
+
+def is_package_installed(package_name):
+  process = subprocess.Popen(["dpkg", "-s", package_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  out, err = process.communicate()
+  return process.returncode == 0
+def install_clang():
+    binaries = [
+            "clang", "clang-cpp", "clang++", "dsymutil", "llc", "lli", "lli-child-target",
+            "llvm-PerfectShuffle", "llvm-addr2line", "llvm-ar", "llvm-as", "llvm-bcanalyzer",
+            "llvm-c-test", "llvm-cat", "llvm-cfi-verify", "llvm-config", "llvm-cov",
+            "llvm-cvtres", "llvm-cxxdump", "llvm-cxxfilt", "llvm-cxxmap", "llvm-diff",
+            "llvm-dis", "llvm-dlltool", "llvm-dwarfdump", "llvm-dwp", "llvm-elfabi",
+            "llvm-exegesis", "llvm-extract", "llvm-ifs", "llvm-install-name-tool",
+            "llvm-jitlink", "llvm-lib", "llvm-link", "llvm-lipo", "llvm-lto", "llvm-lto2",
+            "llvm-mc", "llvm-mca", "llvm-modextract", "llvm-mt", "llvm-nm", "llvm-objcopy",
+            "llvm-objdump", "llvm-opt-report", "llvm-pdbutil", "llvm-profdata", "llvm-ranlib",
+            "llvm-rc", "llvm-readelf", "llvm-readobj", "llvm-reduce", "llvm-rtdyld",
+            "llvm-size", "llvm-split", "llvm-stress", "llvm-strings", "llvm-strip",
+            "llvm-symbolizer", "llvm-tblgen", "llvm-undname", "llvm-xray", "not", "obj2yaml",
+            "opt", "verify-uselistorder", "sanstats", "yaml-bench", "yaml2obj", "ld.lld",
+            "lld", "ld64.lld", "lld-link"
+        ]
+    # Check if the packages are already installed
+    packages = ["clang-12", "lld-12", "x11-utils", "llvm-12"]
+    if all(is_package_installed(pkg) for pkg in packages):
+        print("clang-12, lld-12, x11-utils, llvm-12 required packages are already installed.")
+        for binary in binaries:
+            create_symlink("/usr/bin/" + binary + "-12", "/usr/bin/" + binary)
+        return True
+    print("Clang++ Installing...")
+    try:
+        # see website how config https://apt.llvm.org/
+        subprocess.check_call("wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -", shell=True)
+        subprocess.check_call("echo \"deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-12 main\" | sudo tee /etc/apt/sources.list.d/llvm.list",shell=True)
+        subprocess.check_call(["sudo", "apt-get", "update"])
+        subprocess.check_call(["sudo", "apt-get", "install", "-y", "clang-12", "lld-12", "x11-utils", "llvm-12"])
+        
+        for binary in binaries:
+            create_symlink("/usr/bin/" + binary + "-12", "/usr/bin/" + binary)
+        
+        print("Clang++ installed successfully.")
+    
+    except subprocess.CalledProcessError as e:
+        print("Failed to install clang: ",e)
+        print("errout:",e.output)
+        print("errcode:",e.returncode)
+        return False
+    
+    return True
+
+def update_gcc_version():
+  base.cmd("sudo",["add-apt-repository", "ppa:ubuntu-toolchain-r/test"])
+  base.cmd("sudo",["apt-get", "update"])
+  base.cmd("sudo",["apt-get", "install", "gcc-10", "g++-10"])
+  base.cmd("sudo",["update-alternatives", "--install", "/usr/bin/gcc", "gcc", "/usr/bin/gcc-10", "60", "--slave", "/usr/bin/g++", "g++", "/usr/bin/g++-10"])
+  base.cmd("sudo",["update-alternatives", "--config", "gcc"])
+  return
+# ----------------------------------------------------------------------
 def make():
   old_env = dict(os.environ)
   old_cur = os.getcwd()
@@ -150,24 +214,48 @@ def make():
              "use_custom_libcxx=false",
              "treat_warnings_as_errors=false"]
 
-  if config.check_option("platform", "linux_64"):
+  if config.check_option("platform", "linux_arm64"):
+    if os.path.exists("./customnin"):
+      base.cmd("rm", ["-rf", "customnin"], False)
+    if os.path.exists("./customgn"):
+      base.cmd("rm", ["-rf", "customgn"], False)
+    install_clang()
+    gn_args.append("clang_base_path=\\\"/usr/\\\"")
+    gn_args.append("clang_use_chrome_plugins=false")
+    gn_args.append("use_lld = true")
+    base.cmd("build/linux/sysroot_scripts/install-sysroot.py", ["--arch=arm64"], False)
+    if not base.is_file("/bin/ninja"):
+      base.cmd("git", ["clone", "https://github.com/ninja-build/ninja.git", "-b", "v1.8.2", "customnin"], False)
+      os.chdir("customnin")
+      base.cmd("./configure.py", ["--bootstrap"])
+      os.chdir("../")
+      base.cmd("sudo", ["cp", "-v", "customnin/ninja", "/bin/ninja"])
+      shutil.rmtree("customnin")
+    if os.path.exists("/core/Common/3dParty/v8_89/depot_tools/ninja"):
+      base.cmd("rm", ["-v", "/core/Common/3dParty/v8_89/depot_tools/ninja"])
+
+    base.cmd("git", ["clone", "https://gn.googlesource.com/gn", "customgn"], False)
+    os.chdir("customgn")
+    base.cmd("git", ["checkout", "23d22bcaa71666e872a31fd3ec363727f305417e"], False)
+    base.cmd("sed", ["-i", "-e", "\"s/-Wl,--icf=all//\"", "build/gen.py"], False)
+    base.cmd("python", ["build/gen.py"], False)
+    base.cmd("ninja", ["-C", "out"])
+    os.chdir("../")
+    base.cmd("sudo", ["cp","./customgn/out/gn", "./buildtools/linux64/gn"])
+    shutil.rmtree("customgn")
+
+    base.cmd2("gn", ["gen", "out.gn/linux_arm64", make_args(gn_args, "linux", False)])
+    base.cmd("ninja", ["-C", "out.gn/linux_arm64"])
+  elif config.check_option("platform", "linux_64"):
     base.cmd2("gn", ["gen", "out.gn/linux_64", make_args(gn_args, "linux")])
     base.cmd("ninja", ["-C", "out.gn/linux_64"])
-
-  if config.check_option("platform", "linux_32"):
+  elif config.check_option("platform", "linux_32"):
     base.cmd2("gn", ["gen", "out.gn/linux_32", make_args(gn_args, "linux", False)])
     base.cmd("ninja", ["-C", "out.gn/linux_32"])
-
-  if config.check_option("platform", "linux_arm64"):
-    base.cmd("build/linux/sysroot_scripts/install-sysroot.py", ["--arch=arm64"], False)
-    base.cmd2("gn", ["gen", "out.gn/linux_arm64", make_args(gn_args, "linux_arm64", False)])
-    base.cmd("ninja", ["-C", "out.gn/linux_arm64"])
-
-  if config.check_option("platform", "mac_64"):
+  elif config.check_option("platform", "mac_64"):
     base.cmd2("gn", ["gen", "out.gn/mac_64", make_args(gn_args, "mac")])
     base.cmd("ninja", ["-C", "out.gn/mac_64"])
-
-  if config.check_option("platform", "win_64"):
+  elif config.check_option("platform", "win_64"):
     if (-1 != config.option("config").lower().find("debug")):
       if not base.is_file("out.gn/win_64/debug/obj/v8_monolith.lib"):
         patch_windows_debug()
@@ -177,7 +265,7 @@ def make():
     if not base.is_file("out.gn/win_64/release/obj/v8_monolith.lib"):
       ninja_windows_make(gn_args)
 
-  if config.check_option("platform", "win_32"):
+  elif config.check_option("platform", "win_32"):
     if (-1 != config.option("config").lower().find("debug")):
       if not base.is_file("out.gn/win_32/debug/obj/v8_monolith.lib"):
         patch_windows_debug()

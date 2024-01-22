@@ -12,13 +12,13 @@ def install_deps():
 
   # dependencies
   packages = ["apt-transport-https", 
-              "autoconf2.13",
+              "autoconf",
               "build-essential",
               "ca-certificates",
               "cmake",
               "curl",
               "git",
-              "glib-2.0-dev",
+              "libglib2.0-dev",
               "libglu1-mesa-dev",
               "libgtk-3-dev",
               "libpulse-dev",
@@ -35,10 +35,10 @@ def install_deps():
               "libgstreamer1.0-dev",
               "libgstreamer-plugins-base1.0-dev",
               "libx11-xcb-dev",
-              "libxcb*",
+              "libxcb1-dev",
               "libxi-dev",
               "libxrender-dev",
-              "libxss1",
+              "libxss-dev",
               "libncurses5"]
 
   base.cmd("sudo", ["apt-get", "install", "-y"] + packages)
