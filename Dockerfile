@@ -1,5 +1,10 @@
 FROM ubuntu:18.04
 
+# 设置编译选项
+ENV BRANCH=v8.1.0.178
+ENV PLATFORM=linux_arm64
+ENV TAR_OPTIONS=--no-same-owner
+
 # 设置时区
 ENV TZ=Etc/UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -35,31 +40,33 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
     apt-get install -y clang-12 lld-12 llvm-12 && \
     rm -rf /var/lib/apt/lists/*
 
-
-# 工作目录
-ADD . /build_tools
-WORKDIR /build_tools
 # 设置 Python 链接
 RUN rm /usr/bin/python && ln -s /usr/bin/python2 /usr/bin/python
 
-ENV BRANCH=v8.1.0.178
-ENV PLATFORM=linux_arm64
-ENV TAR_OPTIONS=--no-same-owner
+# 工作目录
+ADD . /build/build_tools
+WORKDIR /build/build_tools
 
 # 执行构建命令
-RUN cd /build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server
+RUN cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server
 
 # 修改最大连接数到99999后重新构建
-RUN sed -i 's/exports.LICENSE_CONNECTIONS = 20;/exports.LICENSE_CONNECTIONS = 99999;/' /server/Common/sources/constants.js
-RUN grep LICENSE_CONNECTIONS /server/Common/sources/constants.js
-RUN sed -i 's/"--update", "1"/"--update", "0"/' /build_tools/tools/linux/automate.py
-RUN cd /build_tools/tools/linux && python3./automate.py --branch=${BRANCH} --platform=${PLATFORM} server 
+RUN sed -i 's/exports.LICENSE_CONNECTIONS = 20;/exports.LICENSE_CONNECTIONS = 99999;/' /build/server/Common/sources/constants.js
+RUN grep LICENSE_CONNECTIONS /build/server/Common/sources/constants.js
+RUN sed -i 's/"--update", "1"/"--update", "0"/' /build/build_tools/tools/linux/automate.py
+RUN cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server 
+
+# 打包编译后结果
+RUN ls / /build
+RUN cd / && tar zcvf /build.tar.gz /build
 
 # 将构建好的二进制拷贝到新镜像
 FROM ubuntu:20.04
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
-COPY --from=0 /build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
+RUN mkdir -p /src
+COPY --from=0 /build.tar.gz /src/build.tar.gz
+COPY --from=0 /build/build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
 RUN apt-get -y update && apt-get -y install sudo vim ttf-wqy-zenhei fonts-wqy-microhei curl iputils-ping
 RUN cd /var/www/onlyoffice/documentserver && \
   mkdir fonts && \
