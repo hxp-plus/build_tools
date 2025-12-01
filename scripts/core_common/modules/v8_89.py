@@ -231,8 +231,8 @@ def make():
       os.chdir("../")
       base.cmd("sudo", ["cp", "-v", "customnin/ninja", "/bin/ninja"])
       shutil.rmtree("customnin")
-    if os.path.exists("/core/Common/3dParty/v8_89/depot_tools/ninja"):
-      base.cmd("rm", ["-v", "/core/Common/3dParty/v8_89/depot_tools/ninja"])
+    if os.path.exists(base.get_script_dir() + "/../../core/Common/3dParty/v8_89/depot_tools/ninja"):
+      base.cmd("rm", ["-v", base.get_script_dir() + "/../../core/Common/3dParty/v8_89/depot_tools/ninja"])
 
     base.cmd("git", ["clone", "https://gn.googlesource.com/gn", "customgn"], False)
     os.chdir("customgn")
