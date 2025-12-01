@@ -37,8 +37,8 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
 
 
 # 工作目录
-ADD . /build_tools
-WORKDIR /build_tools
+ADD . /build/build_tools
+WORKDIR /build/build_tools
 # 设置 Python 链接
 RUN rm /usr/bin/python && ln -s /usr/bin/python2 /usr/bin/python
 
@@ -47,19 +47,19 @@ ENV PLATFORM=linux_arm64
 ENV TAR_OPTIONS=--no-same-owner
 
 # 执行构建命令
-RUN cd /build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server
+RUN cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server
 
 # 修改最大连接数到99999后重新构建
 RUN sed -i 's/exports.LICENSE_CONNECTIONS = 20;/exports.LICENSE_CONNECTIONS = 99999;/' /server/Common/sources/constants.js
 RUN grep LICENSE_CONNECTIONS /server/Common/sources/constants.js
-RUN sed -i 's/"--update", "1"/"--update", "0"/' /build_tools/tools/linux/automate.py
-RUN cd /build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server 
+RUN sed -i 's/"--update", "1"/"--update", "0"/' /build/build_tools/tools/linux/automate.py
+RUN cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server 
 
 # 将构建好的二进制拷贝到新镜像
 FROM ubuntu:20.04
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
-COPY --from=0 /build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
+COPY --from=0 /build/build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
 RUN apt-get -y update && apt-get -y install sudo vim ttf-wqy-zenhei fonts-wqy-microhei curl iputils-ping
 RUN cd /var/www/onlyoffice/documentserver && \
   mkdir fonts && \
