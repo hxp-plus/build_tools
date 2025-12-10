@@ -47,36 +47,34 @@ ENV PLATFORM=linux_arm64
 ENV TAR_OPTIONS=--no-same-owner
 
 # 执行构建命令
-CMD cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server
-
-# 修改最大连接数到99999后重新构建
-RUN sed -i 's/exports.LICENSE_CONNECTIONS = 20;/exports.LICENSE_CONNECTIONS = 99999;/' /build/server/Common/sources/constants.js
-RUN grep LICENSE_CONNECTIONS /build/server/Common/sources/constants.js
-RUN sed -i 's/"--update", "1"/"--update", "0"/' /build/build_tools/tools/linux/automate.py
-RUN cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server 
+RUN cd /build/build_tools/tools/linux && \
+    python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server | tee -a build.log && \
+    sed -i 's/exports.LICENSE_CONNECTIONS = 20;/exports.LICENSE_CONNECTIONS = 99999;/' /build/server/Common/sources/constants.js && \
+    sed -i 's/"--update", "1"/"--update", "0"/' /build/build_tools/tools/linux/automate.py && \
+    cd /build/build_tools/tools/linux && python3 ./automate.py --branch=${BRANCH} --platform=${PLATFORM} server | tee -a build.log
 
 # 编译完成后打包工作目录
-RUN tar -zcvf /build/build.tar.gz /build  
+RUN tar -zcvf /build.tar.gz /build && mv /build.tar.gz /build/
 
-# 将构建好的二进制拷贝到新镜像
-FROM ubuntu:20.04
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
-COPY --from=0 /build/build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
-COPY --from=0 /build/build.tar.gz /root/build.tar.gz
-RUN apt-get -y update && apt-get -y install sudo vim ttf-wqy-zenhei fonts-wqy-microhei curl iputils-ping
-RUN cd /var/www/onlyoffice/documentserver && \
-  mkdir fonts && \
-  LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allfontsgen \
-  --input="${PWD}/core-fonts" \
-  --allfonts-web="${PWD}/sdkjs/common/AllFonts.js" \
-  --allfonts="${PWD}/server/FileConverter/bin/AllFonts.js" \
-  --images="${PWD}/sdkjs/common/Images" \
-  --selection="${PWD}/server/FileConverter/bin/font_selection.bin" \
-  --output-web='fonts' \
-  --use-system="true" &&  \
-  LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allthemesgen \
-  --converter-dir="${PWD}/server/FileConverter/bin" \
-  --src="${PWD}/sdkjs/slide/themes" \
-  --output="${PWD}/sdkjs/common/Images"
-CMD [ "/bin/bash" ]
+## 将构建好的二进制拷贝到新镜像
+#FROM ubuntu:20.04
+#ENV TZ=Asia/Shanghai
+#RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ >/etc/timezone
+#COPY --from=0 /build/build_tools/out/linux_arm64/onlyoffice/documentserver /var/www/onlyoffice/documentserver
+#COPY --from=0 /build/build.tar.gz /root/build.tar.gz
+#RUN apt-get -y update && apt-get -y install sudo vim ttf-wqy-zenhei fonts-wqy-microhei curl iputils-ping
+#RUN cd /var/www/onlyoffice/documentserver && \
+#  mkdir fonts && \
+#  LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allfontsgen \
+#  --input="${PWD}/core-fonts" \
+#  --allfonts-web="${PWD}/sdkjs/common/AllFonts.js" \
+#  --allfonts="${PWD}/server/FileConverter/bin/AllFonts.js" \
+#  --images="${PWD}/sdkjs/common/Images" \
+#  --selection="${PWD}/server/FileConverter/bin/font_selection.bin" \
+#  --output-web='fonts' \
+#  --use-system="true" &&  \
+#  LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allthemesgen \
+#  --converter-dir="${PWD}/server/FileConverter/bin" \
+#  --src="${PWD}/sdkjs/slide/themes" \
+#  --output="${PWD}/sdkjs/common/Images"
+#CMD [ "/bin/bash" ]
